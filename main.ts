@@ -1,6 +1,6 @@
-const fs = require('fs');
-const readline = require('readline');
-const npath = require('path');
+import * as fs from 'fs';
+import * as readline from 'readline';
+import * as npath from 'path';
 
 const rl = readline.createInterface({
 	input: process.stdin,
@@ -23,42 +23,37 @@ CSV Links: ${output.csvLinks}`
 	rl.close();
 });
 
-const truncateFileName = (name) => {
-	return (
-		name.substring(0, name.lastIndexOf(' ')) +
-		name.substring(name.indexOf('.'))
-	);
+const truncateFileName = (fileName: string) => {
+	return fileName.substring(0, fileName.lastIndexOf(' ')) + fileName.substring(fileName.indexOf('.'));
 };
 
-const truncateDirName = (name) => {
-	return name.substring(0, name.lastIndexOf(' '));
+const truncateDirName = (directoryName: string) => {
+	return directoryName.substring(0, directoryName.lastIndexOf(' '));
 };
 
 const ObsidianIllegalNameRegex = /[\*\"\/\\\<\>\:\|\?]/g;
 const URLRegex = /(:\/\/)|(w{3})|(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/;
-const correctMarkdownLinks = (content) => {
+const correctMarkdownLinks = (content: string) => {
 	//* [Link Text](Link Directory + uuid/And Page Name + uuid) => [[LinkText]]
 
+	//TODO: Test all of these regex patterns and document exactly what they match to.
+	//They can likely be minimized or combined in some way.
 	const linkFullMatches = content.match(/(\[(.*?)\])(\((.*?)\))/gi);
 	const linkTextMatches = content.match(/(\[(.*?)\])(\()/gi);
 	const linkFloaterMatches = content.match(/([\S]*\.md(\))?)/gi);
 	const linkNotionMatches = content.match(/([\S]*notion.so(\S*))/g);
-	if (!linkFullMatches && !linkFloaterMatches && !linkNotionMatches)
-		return { content: content, links: 0 };
+	if (!linkFullMatches && !linkFloaterMatches && !linkNotionMatches) return { content: content, links: 0 };
 
 	let totalLinks = 0;
 
 	let out = content;
-	if (linkFullMatches) {
+	if (linkFullMatches && linkTextMatches) {
 		totalLinks += linkFullMatches.length;
 		for (let i = 0; i < linkFullMatches.length; i++) {
 			if (URLRegex.test(linkFullMatches[i])) {
 				continue;
 			}
-			let linkText = linkTextMatches[i].substring(
-				1,
-				linkTextMatches[i].length - 2
-			);
+			let linkText = linkTextMatches[i].substring(1, linkTextMatches[i].length - 2);
 			if (linkText.includes('.png')) {
 				linkText = convertPNGPath(linkText);
 			} else {
@@ -70,9 +65,7 @@ const correctMarkdownLinks = (content) => {
 
 	//! Convert free-floating relativePaths and Notion.so links
 	if (linkFloaterMatches) {
-		totalLinks += linkFullMatches
-			? linkFloaterMatches.length - linkFullMatches.length
-			: linkFloaterMatches.length;
+		totalLinks += linkFullMatches ? linkFloaterMatches.length - linkFullMatches.length : linkFloaterMatches.length;
 		out = out.replace(/([\S]*\.md(\))?)/gi, convertRelativePath);
 	}
 
@@ -87,7 +80,7 @@ const correctMarkdownLinks = (content) => {
 	};
 };
 
-const convertPNGPath = (path) => {
+const convertPNGPath = (path: string) => {
 	let imageTitle = path
 		.substring(path.lastIndexOf('/') + 1)
 		.split('%20')
@@ -99,7 +92,7 @@ const convertPNGPath = (path) => {
 	return `${path}/${imageTitle}`;
 };
 
-const convertNotionLinks = (match, p1, p2, p3) => {
+const convertNotionLinks = (match: string) => {
 	return `[[${match
 		.substring(match.lastIndexOf('/') + 1)
 		.split('-')
@@ -107,17 +100,17 @@ const convertNotionLinks = (match, p1, p2, p3) => {
 		.join(' ')}]]`;
 };
 
-const convertRelativePath = (path) => {
+const convertRelativePath = (path: string) => {
 	return `[[${path.split('/').pop().split('%20').slice(0, -1).join(' ')}]]`;
 };
 
-const correctCSVLinks = (content) => {
+const correctCSVLinks = (content: string) => {
 	//* ../Relative%20Path/To/File%20Name.md => [[File Name]]
 	let lines = content.split('\n');
 	let links = 0;
 	for (let x = 0; x < lines.length; x++) {
 		let line = lines[x];
-		cells = line.split(',');
+		let cells = line.split(',');
 
 		for (let y = 0; y < cells.length; y++) {
 			let cell = cells[y];
@@ -131,24 +124,21 @@ const correctCSVLinks = (content) => {
 	return { content: lines.join('\n'), links: links };
 };
 
-const convertCSVToMarkdown = (content) => {
-	const csvCommaReplace = (match, p1, p2, p3, offset, string) => {
+const convertCSVToMarkdown = (content: string) => {
+	//TODO clean up parameters
+	const csvCommaReplace = (match: string, p1: string, p2: string, p3: string, offset: string, string: string) => {
 		return `${p1}|${p3}`;
 	};
 
-	let fix = content
-		.replace(/(\S)(\,)((\S)|(\n)|($))/g, csvCommaReplace)
-		.split('\n');
-	const headersplit = '-|'.repeat(
-		fix[0].split('').filter((char) => char === '|').length + 1
-	);
+	let fix = content.replace(/(\S)(\,)((\S)|(\n)|($))/g, csvCommaReplace).split('\n');
+	const headersplit = '-|'.repeat(fix[0].split('').filter((char) => char === '|').length + 1);
 	fix.splice(1, 0, headersplit);
 	return fix.join('\n');
 };
 
-const fixNotionExport = function (path) {
-	let directories = [];
-	let files = [];
+const fixNotionExport = function (path: string) {
+	let directories: string[] = [];
+	let files: string[] = [];
 	let markdownLinks = 0;
 	let csvLinks = 0;
 
@@ -174,27 +164,15 @@ const fixNotionExport = function (path) {
 
 		//Fix Markdown Links
 		if (file.substring(file.indexOf('.')) === '.md') {
-			const correctedFileContents = correctMarkdownLinks(
-				fs.readFileSync(file, 'utf8')
-			);
-			if (correctedFileContents.links)
-				markdownLinks += correctedFileContents.links;
+			const correctedFileContents = correctMarkdownLinks(fs.readFileSync(file, 'utf8'));
+			if (correctedFileContents.links) markdownLinks += correctedFileContents.links;
 			fs.writeFileSync(file, correctedFileContents.content, 'utf8');
 		} else if (file.substring(file.indexOf('.')) === '.csv') {
-			const correctedFileContents = correctCSVLinks(
-				fs.readFileSync(file, 'utf8')
-			);
-			const csvConverted = convertCSVToMarkdown(
-				correctedFileContents.content
-			);
-			if (correctedFileContents.links)
-				csvLinks += correctedFileContents.links;
+			const correctedFileContents = correctCSVLinks(fs.readFileSync(file, 'utf8'));
+			const csvConverted = convertCSVToMarkdown(correctedFileContents.content);
+			if (correctedFileContents.links) csvLinks += correctedFileContents.links;
 			fs.writeFileSync(file, correctedFileContents.content, 'utf8');
-			fs.writeFileSync(
-				file.substring(0, file.indexOf('.')) + '.md',
-				csvConverted,
-				'utf8'
-			);
+			fs.writeFileSync(file.substring(0, file.indexOf('.')) + '.md', csvConverted, 'utf8');
 		}
 	}
 	for (let i = 0; i < directories.length; i++) {
