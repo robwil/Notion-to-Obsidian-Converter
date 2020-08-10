@@ -1,0 +1,14 @@
+{
+  "name": "Notion-to-Obsidian-Converter",
+  "version": "0.1",
+  "description": "Converts Notion exports to Obsidian",
+  "main": "main.js",
+  "repository": "https://github.com/connertennery/Notion-to-Obsidian-Converter.git",
+  "author": "connertennery <code@connertennery.dev>",
+  "license": "MIT",
+  "private": false,
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^14.0.27"
+  }
+}
