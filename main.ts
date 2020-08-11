@@ -101,7 +101,7 @@ const convertNotionLinks = (match: string) => {
 };
 
 const convertRelativePath = (path: string) => {
-	return `[[${path.split('/').pop().split('%20').slice(0, -1).join(' ')}]]`;
+	return `[[${(path.split('/').pop() || '').split('%20').slice(0, -1).join(' ')}]]`;
 };
 
 const correctCSVLinks = (content: string) => {
