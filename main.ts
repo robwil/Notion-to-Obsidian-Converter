@@ -38,10 +38,10 @@ const correctMarkdownLinks = (content: string) => {
 
 	//TODO: Test all of these regex patterns and document exactly what they match to.
 	//They can likely be minimized or combined in some way.
-	const linkFullMatches = content.match(/(\[(.*?)\])(\((.*?)\))/gi);
-	const linkTextMatches = content.match(/(\[(.*?)\])(\()/gi);
-	const linkFloaterMatches = content.match(/([\S]*\.md(\))?)/gi);
-	const linkNotionMatches = content.match(/([\S]*notion.so(\S*))/g);
+	const linkFullMatches = content.match(/(\[(.*?)\])(\((.*?)\))/gi); //=> [Link Text](Link Directory + uuid/And Page Name + uuid)
+	const linkTextMatches = content.match(/(\[(.*?)\])(\()/gi); //=> [Link Text](
+	const linkFloaterMatches = content.match(/([\S]*\.md(\))?)/gi);// => Text](Link Directory + uuid/And Page Name + uuid)
+	const linkNotionMatches = content.match(/([\S]*notion.so(\S*))/g); // => `https://www.notion.so/The-Page-Title-2d41ab7b61d14cec885357ab17d48536`
 	if (!linkFullMatches && !linkFloaterMatches && !linkNotionMatches) return { content: content, links: 0 };
 
 	let totalLinks = 0;
@@ -80,6 +80,7 @@ const correctMarkdownLinks = (content: string) => {
 	};
 };
 
+//`![Page%20Title%20c5ae5f01ba5d4fb9a94d13d99397100c/Image%20Name.png](Page%20Title%20c5ae5f01ba5d4fb9a94d13d99397100c/Image%20Name.png)` => `![Page Title/Image Name.png]`
 const convertPNGPath = (path: string) => {
 	let imageTitle = path
 		.substring(path.lastIndexOf('/') + 1)
@@ -92,6 +93,7 @@ const convertPNGPath = (path: string) => {
 	return `${path}/${imageTitle}`;
 };
 
+//`https://www.notion.so/The-Page-Title-2d41ab7b61d14cec885357ab17d48536` => `[[The Page Title]]`
 const convertNotionLinks = (match: string) => {
 	return `[[${match
 		.substring(match.lastIndexOf('/') + 1)
@@ -100,10 +102,13 @@ const convertNotionLinks = (match: string) => {
 		.join(' ')}]]`;
 };
 
+//Takes the last section in the path (removing the preceeding directorie) then removes the uuid at the end.
+//`The%20Page%20Title%200637657f8a854e05a142871cce86ff701` => `[[Page Title]]
 const convertRelativePath = (path: string) => {
-	return `[[${(path.split('/').pop() || '').split('%20').slice(0, -1).join(' ')}]]`;
+	return `[[${(path.split('/').pop() || path).split('%20').slice(0, -1).join(' ')}]]`;
 };
 
+//Goes through each link inside of CSVs and converts them
 const correctCSVLinks = (content: string) => {
 	//* ../Relative%20Path/To/File%20Name.md => [[File Name]]
 	let lines = content.split('\n');
