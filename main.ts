@@ -33,15 +33,19 @@ const truncateDirName = (directoryName: string) => {
 
 const ObsidianIllegalNameRegex = /[\*\"\/\\\<\>\:\|\?]/g;
 const URLRegex = /(:\/\/)|(w{3})|(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/;
+const linkFullRegex = /(\[(.*?)\])(\((.*?)\))/gi;
+const linkTextRegex = /(\[(.*?)\])(\()/gi;
+const linkFloaterRegex = /([\S]*\.md(\))?)/gi;
+const linkNotionRegex = /([\S]*notion.so(\S*))/g
 const correctMarkdownLinks = (content: string) => {
 	//* [Link Text](Link Directory + uuid/And Page Name + uuid) => [[LinkText]]
 
 	//TODO: Test all of these regex patterns and document exactly what they match to.
 	//They can likely be minimized or combined in some way.
-	const linkFullMatches = content.match(/(\[(.*?)\])(\((.*?)\))/gi); //=> [Link Text](Link Directory + uuid/And Page Name + uuid)
-	const linkTextMatches = content.match(/(\[(.*?)\])(\()/gi); //=> [Link Text](
-	const linkFloaterMatches = content.match(/([\S]*\.md(\))?)/gi);// => Text](Link Directory + uuid/And Page Name + uuid)
-	const linkNotionMatches = content.match(/([\S]*notion.so(\S*))/g); // => `https://www.notion.so/The-Page-Title-2d41ab7b61d14cec885357ab17d48536`
+	const linkFullMatches = content.match(linkFullRegex); //=> [Link Text](Link Directory + uuid/And Page Name + uuid)
+	const linkTextMatches = content.match(linkTextRegex); //=> [Link Text](
+	const linkFloaterMatches = content.match(linkFloaterRegex);// => Text](Link Directory + uuid/And Page Name + uuid)
+	const linkNotionMatches = content.match(linkNotionRegex); // => `https://www.notion.so/The-Page-Title-2d41ab7b61d14cec885357ab17d48536`
 	if (!linkFullMatches && !linkFloaterMatches && !linkNotionMatches) return { content: content, links: 0 };
 
 	let totalLinks = 0;
@@ -63,14 +67,15 @@ const correctMarkdownLinks = (content: string) => {
 		}
 	}
 
-	//! Convert free-floating relativePaths and Notion.so links
+	//! Convert free-floating relativePaths
 	if (linkFloaterMatches) {
 		totalLinks += linkFullMatches ? linkFloaterMatches.length - linkFullMatches.length : linkFloaterMatches.length;
-		out = out.replace(/([\S]*\.md(\))?)/gi, convertRelativePath);
+		//* This often won't run because the earlier linkFullMatches && linkTextMatches block will take care of most of the links
+		out = out.replace(linkFloaterRegex, convertRelativePath);
 	}
 
 	if (linkNotionMatches) {
-		out = out.replace(/([\S]*notion.so(\S*))/g, convertNotionLinks);
+		out = out.replace(linkNotionRegex, convertNotionLinks);
 		totalLinks += linkNotionMatches.length;
 	}
 
