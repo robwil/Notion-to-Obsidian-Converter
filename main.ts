@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as readline from 'readline';
 import * as npath from 'path';
+import { ObsidianIllegalNameRegex, URLRegex, linkFullRegex, linkTextRegex, linkFloaterRegex, linkNotionRegex } from './regex';
 
 const rl = readline.createInterface({
 	input: process.stdin,
@@ -31,12 +32,6 @@ const truncateDirName = (directoryName: string) => {
 	return directoryName.substring(0, directoryName.lastIndexOf(' '));
 };
 
-const ObsidianIllegalNameRegex = /[\*\"\/\\\<\>\:\|\?]/g;
-const URLRegex = /(:\/\/)|(w{3})|(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/;
-const linkFullRegex = /(\[(.*?)\])(\((.*?)\))/gi;
-const linkTextRegex = /(\[(.*?)\])(\()/gi;
-const linkFloaterRegex = /([\S]*\.md(\))?)/gi;
-const linkNotionRegex = /([\S]*notion.so(\S*))/g
 const correctMarkdownLinks = (content: string) => {
 	//* [Link Text](Link Directory + uuid/And Page Name + uuid) => [[LinkText]]
 
