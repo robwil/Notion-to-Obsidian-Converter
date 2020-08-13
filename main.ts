@@ -180,6 +180,7 @@ const fixNotionExport = function (path: string) {
 			fs.writeFileSync(file.substring(0, file.indexOf('.')) + '.md', csvConverted, 'utf8');
 		}
 	}
+
 	for (let i = 0; i < directories.length; i++) {
 		let dir = directories[i];
 		fs.renameSync(dir, truncateDirName(dir));
