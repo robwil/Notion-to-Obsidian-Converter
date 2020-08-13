@@ -141,13 +141,10 @@ const convertCSVToMarkdown = (content: string) => {
 	return fix.join('\n');
 };
 
-const fixNotionExport = function (path: string) {
-	let directories: string[] = [];
-	let files: string[] = [];
-	let markdownLinks = 0;
-	let csvLinks = 0;
-
-	let currentDirectory = fs.readdirSync(path, { withFileTypes: true });
+const getDirectoryContent = (path: string) => {
+	const directories: string[] = [];
+	const files: string[] = [];
+	const currentDirectory = fs.readdirSync(path, { withFileTypes: true });
 
 	for (let i = 0; i < currentDirectory.length; i++) {
 		let currentPath = npath.format({
@@ -157,6 +154,17 @@ const fixNotionExport = function (path: string) {
 		if (currentDirectory[i].isDirectory()) directories.push(currentPath);
 		if (currentDirectory[i].isFile()) files.push(currentPath);
 	}
+
+	return { directories: directories, files: files };
+}
+
+const fixNotionExport = (path: string) => {
+	let markdownLinks = 0;
+	let csvLinks = 0;
+
+	const directoryContent = getDirectoryContent(path);
+	let directories: string[] = directoryContent.directories;
+	let files: string[] = directoryContent.files;
 
 	for (let i = 0; i < files.length; i++) {
 		let file = files[i];
