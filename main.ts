@@ -38,6 +38,7 @@ const correctMarkdownLinks = (content: string) => {
 	//TODO: Test all of these regex patterns and document exactly what they match to.
 	//They can likely be minimized or combined in some way.
 	const linkFullMatches = content.match(linkFullRegex); //=> [Link Text](Link Directory + uuid/And Page Name + uuid)
+	//? Because this is only a part of the above, it should probably be run in the iteration below so it doesn't have to check the whole page twice.
 	const linkTextMatches = content.match(linkTextRegex); //=> [Link Text](
 	const linkFloaterMatches = content.match(linkFloaterRegex);// => Text](Link Directory + uuid/And Page Name + uuid)
 	const linkNotionMatches = content.match(linkNotionRegex); // => `https://www.notion.so/The-Page-Title-2d41ab7b61d14cec885357ab17d48536`
