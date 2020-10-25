@@ -26,30 +26,30 @@ CSV Links: ${output.csvLinks}`
 
 const truncateFileName = (fileName: string) => {
 	// return fileName.substring(0, fileName.lastIndexOf(' ')) + fileName.substring(fileName.indexOf('.'));
-	let bn = npath.basename(name);
-	bn = bn.lastIndexOf(' ') > 0 ? bn.substring(0, bn.lastIndexOf(' ')) : bn;
+	let basename = npath.basename(name);
+	basename = basename.lastIndexOf(' ') > 0 ? basename.substring(0, basename.lastIndexOf(' ')) : basename;
 	return npath.resolve(
 		npath.format({
 			dir: npath.dirname(name),
-			base: bn + npath.extname(name),
+			base: basename + npath.extname(name),
 		})
 	);
 };
 
 const truncateDirName = (directoryName: string) => {
 	// return directoryName.substring(0, directoryName.lastIndexOf(' '));
-	let bn = npath.basename(name);
-	bn = bn.lastIndexOf(' ') > 0 ? bn.substring(0, bn.lastIndexOf(' ')) : bn;
+	let basename = npath.basename(name);
+	basename = basename.lastIndexOf(' ') > 0 ? basename.substring(0, basename.lastIndexOf(' ')) : basename;
 	return npath.resolve(
 		npath.format({
 			dir: npath.dirname(name),
-			base: bn,
+			base: basename,
 		})
 	);
 };
 
-const correctMarkdownLinks = (content: string) => {
-	//* [Link Text](Link Directory + uuid/And Page Name + uuid) => [[LinkText]]
+//* [Link Text](Link Directory + uuid/And Page Name + uuid) => [[LinkText]]
+const convertMarkdownLinks = (content: string) => {
 
 	//TODO: Test all of these regex patterns and document exactly what they match to.
 	//They can likely be minimized or combined in some way.
@@ -61,7 +61,6 @@ const correctMarkdownLinks = (content: string) => {
 	if (!linkFullMatches && !linkFloaterMatches && !linkNotionMatches) return { content: content, links: 0 };
 
 	let totalLinks = 0;
-
 	let out = content;
 	if (linkFullMatches && linkTextMatches) {
 		totalLinks += linkFullMatches.length;
@@ -80,14 +79,16 @@ const correctMarkdownLinks = (content: string) => {
 	}
 
 	//! Convert free-floating relativePaths
+	//TODO Document when and why this happens
 	if (linkFloaterMatches) {
 		totalLinks += linkFullMatches ? linkFloaterMatches.length - linkFullMatches.length : linkFloaterMatches.length;
 		//* This often won't run because the earlier linkFullMatches && linkTextMatches block will take care of most of the links
 		out = out.replace(linkFloaterRegex, convertRelativePath);
 	}
 
+	//Convert random Notion.so links
 	if (linkNotionMatches) {
-		out = out.replace(linkNotionRegex, convertNotionLinks);
+		out = out.replace(linkNotionRegex, convertNotionLink);
 		totalLinks += linkNotionMatches.length;
 	}
 
@@ -97,7 +98,7 @@ const correctMarkdownLinks = (content: string) => {
 	};
 };
 
-//`![Page%20Title%20c5ae5f01ba5d4fb9a94d13d99397100c/Image%20Name.png](Page%20Title%20c5ae5f01ba5d4fb9a94d13d99397100c/Image%20Name.png)` => `![Page Title/Image Name.png]`
+//* `![Page%20Title%20c5ae5f01ba5d4fb9a94d13d99397100c/Image%20Name.png](Page%20Title%20c5ae5f01ba5d4fb9a94d13d99397100c/Image%20Name.png)` => `![Page Title/Image Name.png]`
 const convertPNGPath = (path: string) => {
 	let imageTitle = path
 		.substring(path.lastIndexOf('/') + 1)
@@ -110,8 +111,8 @@ const convertPNGPath = (path: string) => {
 	return `${path}/${imageTitle}`;
 };
 
-//`https://www.notion.so/The-Page-Title-2d41ab7b61d14cec885357ab17d48536` => `[[The Page Title]]`
-const convertNotionLinks = (match: string) => {
+//* `https://www.notion.so/The-Page-Title-2d41ab7b61d14cec885357ab17d48536` => `[[The Page Title]]`
+const convertNotionLink = (match: string) => {
 	return `[[${match
 		.substring(match.lastIndexOf('/') + 1)
 		.split('-')
@@ -119,15 +120,15 @@ const convertNotionLinks = (match: string) => {
 		.join(' ')}]]`;
 };
 
-//Takes the last section in the path (removing the preceeding directorie) then removes the uuid at the end.
-//`The%20Page%20Title%200637657f8a854e05a142871cce86ff701` => `[[Page Title]]
+//Removes the leading directory and uuid at the end, leaving the page title
+//* `The%20Page%20Title%200637657f8a854e05a142871cce86ff701` => `[[Page Title]]
 const convertRelativePath = (path: string) => {
 	return `[[${(path.split('/').pop() || path).split('%20').slice(0, -1).join(' ')}]]`;
 };
 
 //Goes through each link inside of CSVs and converts them
-const correctCSVLinks = (content: string) => {
-	//* ../Relative%20Path/To/File%20Name.md => [[File Name]]
+//* ../Relative%20Path/To/File%20Name.md => [[File Name]]
+const convertCSVLinks = (content: string) => {
 	let lines = content.split('\n');
 	let links = 0;
 	for (let x = 0; x < lines.length; x++) {
@@ -158,6 +159,7 @@ const convertCSVToMarkdown = (content: string) => {
 	return fix.join('\n');
 };
 
+//Returns all of the directories and files for a path
 const getDirectoryContent = (path: string) => {
 	const directories: string[] = [];
 	const files: string[] = [];
@@ -185,23 +187,27 @@ const fixNotionExport = (path: string) => {
 
 	for (let i = 0; i < files.length; i++) {
 		let file = files[i];
-		if (!file.includes('.png')) {
-			let trunc = truncateFileName(file);
-			fs.renameSync(file, trunc);
-			file = trunc;
-			files[i] = trunc;
+
+		//Rename file
+		if (npath.extname(file) !== '.png') {
+			const truncatedFileName = truncateFileName(file);
+			fs.renameSync(file, truncatedFileName);
+			file = truncatedFileName;
+			files[i] = truncatedFileName;
 		}
 
-		//Fix Markdown Links
+		//Convert Markdown Links
 		if (npath.extname(file) === '.md') {
-			const correctedFileContents = correctMarkdownLinks(fs.readFileSync(file, 'utf8'));
+			const correctedFileContents = convertMarkdownLinks(fs.readFileSync(file, 'utf8'));
 			if (correctedFileContents.links) markdownLinks += correctedFileContents.links;
 			fs.writeFileSync(file, correctedFileContents.content, 'utf8');
-		} else if (npath.extname(file) === '.csv') {
-			const correctedFileContents = correctCSVLinks(fs.readFileSync(file, 'utf8'));
-			const csvConverted = convertCSVToMarkdown(correctedFileContents.content);
-			if (correctedFileContents.links) csvLinks += correctedFileContents.links;
-			fs.writeFileSync(file, correctedFileContents.content, 'utf8');
+		}
+		//Convert CSV Links and create converted, extra CSV => Markdown file
+		else if (npath.extname(file) === '.csv') {
+			const convertedCSVFile = convertCSVLinks(fs.readFileSync(file, 'utf8'));
+			const csvContentAsMarkdown = convertCSVToMarkdown(convertedCSVFile.content);
+			if (convertedCSVFile.links) csvLinks += convertedCSVFile.links;
+			fs.writeFileSync(file, convertedCSVFile.content, 'utf8');
 			fs.writeFileSync(
 				npath.resolve(
 					npath.format({
@@ -209,18 +215,20 @@ const fixNotionExport = (path: string) => {
 						base: npath.basename(file, `.csv`) + '.md',
 					})
 				),
-				csvConverted,
+				csvContentAsMarkdown,
 				'utf8'
 			);
 		}
 	}
 
+	//Rename directories
 	for (let i = 0; i < directories.length; i++) {
 		let dir = directories[i];
 		fs.renameSync(dir, truncateDirName(dir));
 		directories[i] = truncateDirName(dir);
 	}
 
+	//Convert chldren directories
 	directories.forEach((dir) => {
 		const reading = fixNotionExport(dir);
 		directories = directories.concat(reading.directories);
