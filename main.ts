@@ -25,11 +25,27 @@ CSV Links: ${output.csvLinks}`
 });
 
 const truncateFileName = (fileName: string) => {
-	return fileName.substring(0, fileName.lastIndexOf(' ')) + fileName.substring(fileName.indexOf('.'));
+	// return fileName.substring(0, fileName.lastIndexOf(' ')) + fileName.substring(fileName.indexOf('.'));
+	let bn = npath.basename(name);
+	bn = bn.lastIndexOf(' ') > 0 ? bn.substring(0, bn.lastIndexOf(' ')) : bn;
+	return npath.resolve(
+		npath.format({
+			dir: npath.dirname(name),
+			base: bn + npath.extname(name),
+		})
+	);
 };
 
 const truncateDirName = (directoryName: string) => {
-	return directoryName.substring(0, directoryName.lastIndexOf(' '));
+	// return directoryName.substring(0, directoryName.lastIndexOf(' '));
+	let bn = npath.basename(name);
+	bn = bn.lastIndexOf(' ') > 0 ? bn.substring(0, bn.lastIndexOf(' ')) : bn;
+	return npath.resolve(
+		npath.format({
+			dir: npath.dirname(name),
+			base: bn,
+		})
+	);
 };
 
 const correctMarkdownLinks = (content: string) => {
@@ -177,16 +193,25 @@ const fixNotionExport = (path: string) => {
 		}
 
 		//Fix Markdown Links
-		if (file.substring(file.indexOf('.')) === '.md') {
+		if (npath.extname(file) === '.md') {
 			const correctedFileContents = correctMarkdownLinks(fs.readFileSync(file, 'utf8'));
 			if (correctedFileContents.links) markdownLinks += correctedFileContents.links;
 			fs.writeFileSync(file, correctedFileContents.content, 'utf8');
-		} else if (file.substring(file.indexOf('.')) === '.csv') {
+		} else if (npath.extname(file) === '.csv') {
 			const correctedFileContents = correctCSVLinks(fs.readFileSync(file, 'utf8'));
 			const csvConverted = convertCSVToMarkdown(correctedFileContents.content);
 			if (correctedFileContents.links) csvLinks += correctedFileContents.links;
 			fs.writeFileSync(file, correctedFileContents.content, 'utf8');
-			fs.writeFileSync(file.substring(0, file.indexOf('.')) + '.md', csvConverted, 'utf8');
+			fs.writeFileSync(
+				npath.resolve(
+					npath.format({
+						dir: npath.dirname(file),
+						base: npath.basename(file, `.csv`) + '.md',
+					})
+				),
+				csvConverted,
+				'utf8'
+			);
 		}
 	}
 
