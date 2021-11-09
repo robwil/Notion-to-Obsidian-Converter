@@ -6,9 +6,11 @@ const rl = readline.createInterface({
 	input: process.stdin,
 	output: process.stdout,
 });
+let rootPath;
 rl.question('Notion Export Path:\n', (path) => {
 	const start = Date.now();
-	const output = fixNotionExport(path.trim());
+	rootPath = path.trim();
+	const output = fixNotionExport(rootPath);
 	const elapsed = Date.now() - start;
 
 	console.log(
@@ -16,6 +18,7 @@ rl.question('Notion Export Path:\n', (path) => {
 ${'-'.repeat(8)}
 Directories: ${output.directories.length}
 Files: ${output.files.length}
+Images: ${output.images.length}
 Markdown Links: ${output.markdownLinks}
 CSV Links: ${output.csvLinks}`
 	);
@@ -50,14 +53,14 @@ const URLRegex = /(:\/\/)|(w{3})|(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/;
 const correctMarkdownLinks = (content) => {
 	//* [Link Text](Link Directory + uuid/And Page Name + uuid) => [[LinkText]]
 
-	const linkFullMatches = content.match(/(\[(.*?)\])(\((.*?)\))/gi);
-	const linkTextMatches = content.match(/(\[(.*?)\])(\()/gi);
+	const linkFullMatches = content.match(/(\[(.*?)\])(\((.*)\))(\s*)/gi);
 	const linkFloaterMatches = content.match(/([\S]*\.md(\))?)/gi);
 	const linkNotionMatches = content.match(/([\S]*notion.so(\S*))/g);
 	if (!linkFullMatches && !linkFloaterMatches && !linkNotionMatches)
-		return { content: content, links: 0 };
+		return { content: content, links: 0, foundImages: [] };
 
 	let totalLinks = 0;
+	const foundImages = [];
 
 	let out = content;
 	if (linkFullMatches) {
@@ -66,16 +69,18 @@ const correctMarkdownLinks = (content) => {
 			if (URLRegex.test(linkFullMatches[i])) {
 				continue;
 			}
-			let linkText = linkTextMatches[i].substring(
-				1,
-				linkTextMatches[i].length - 2
-			);
-			if (linkText.includes('.png')) {
-				linkText = convertPNGPath(linkText);
+			const linkPieces = linkFullMatches[i].match(/(\[(.*?)\])(\((.*)\))(\s*)/);
+			let linkText = linkPieces[2];
+			if (isImagePath(linkText)) {
+				// for images, we actually care about the link destination, not the link text
+				linkText = linkPieces[4];
+				linkText = convertImagePath(linkText);
+				foundImages.push(linkText);
 			} else {
 				linkText = linkText.replace(ObsidianIllegalNameRegex, ' ');
 			}
-			out = out.replace(linkFullMatches[i], `[[${linkText}]]`);
+			const endWhitespace = linkPieces[5];
+			out = out.replace(linkFullMatches[i], `[[${linkText}]]${endWhitespace}`);
 		}
 	}
 
@@ -91,14 +96,23 @@ const correctMarkdownLinks = (content) => {
 		out = out.replace(/([\S]*notion.so(\S*))/g, convertNotionLinks);
 		totalLinks += linkNotionMatches.length;
 	}
-
 	return {
 		content: out,
 		links: totalLinks,
+		foundImages,
 	};
 };
 
-const convertPNGPath = (path) => {
+const isImagePath = (path) => {
+	return path.includes('.png') 
+		|| path.includes(".gif") 
+		|| path.includes(".jpg") 
+		|| path.includes(".jpeg") 
+		|| path.includes(".svg") 
+		|| path.includes(".webp");
+}
+
+const convertImagePath = (path) => {
 	let imageTitle = path
 		.substring(path.lastIndexOf('/') + 1)
 		.split('%20')
@@ -106,7 +120,7 @@ const convertPNGPath = (path) => {
 	path = convertRelativePath(path.substring(0, path.lastIndexOf('/')));
 	path = path.substring(2, path.length - 2);
 
-	return `${path}/${imageTitle}`;
+	return `/Images/${path}/${imageTitle}`;
 };
 
 const convertNotionLinks = (match, p1, p2, p3) => {
@@ -161,6 +175,7 @@ const fixNotionExport = function (path) {
 	let files = [];
 	let markdownLinks = 0;
 	let csvLinks = 0;
+	let images = [];
 
 	let currentDirectory = fs.readdirSync(path, { withFileTypes: true });
 
@@ -175,7 +190,7 @@ const fixNotionExport = function (path) {
 
 	for (let i = 0; i < files.length; i++) {
 		let file = files[i];
-		if (!file.includes('.png')) {
+		if (!isImagePath(file)) {
 			let trunc = truncateFileName(file);
 			fs.renameSync(file, trunc);
 			file = trunc;
@@ -190,6 +205,7 @@ const fixNotionExport = function (path) {
 			if (correctedFileContents.links)
 				markdownLinks += correctedFileContents.links;
 			fs.writeFileSync(file, correctedFileContents.content, 'utf8');
+			images.push(...(correctedFileContents.foundImages));
 		} else if (npath.extname(file) === '.csv') {
 			const correctedFileContents = correctCSVLinks(
 				fs.readFileSync(file, 'utf8')
@@ -222,12 +238,38 @@ const fixNotionExport = function (path) {
 		directories[i] = dest;
 	}
 
+	// move all images to a central /Images/ folder.
+	// the /Images/ prefix is already in imagePath.
+	images.forEach((imagePath) => {
+		const imagePieces = imagePath.split('/Images/');
+		const currentFilename = npath.resolve(npath.format({dir: path, base: imagePieces[1]}));
+		const newFilename = npath.resolve(rootPath + '/' + imagePath);
+		const newFileDirectory = npath.dirname(newFilename);
+		if (!fs.existsSync(newFileDirectory)){
+			fs.mkdirSync(newFileDirectory, { recursive: true });
+		}
+		fs.renameSync(currentFilename, newFilename);
+	});
+
+	// after all images are moved, we need to delete their original directories which should now be empty
+	images.forEach((imagePath) => {
+		const imagePieces = imagePath.split('/Images/');
+		const currentFilename = npath.resolve(npath.format({dir: path, base: imagePieces[1]}));
+		const currentDirectory = npath.dirname(currentFilename);
+		if (fs.existsSync(currentDirectory)) {
+			fs.rmdirSync(currentDirectory);
+			// also remove directory from recursion that will happen below
+			directories = directories.filter(directory => directory == currentDirectory);
+		}
+	});
+
 	directories.forEach((dir) => {
 		const stats = fixNotionExport(dir);
 		directories = directories.concat(stats.directories);
 		files = files.concat(stats.files);
 		markdownLinks += stats.markdownLinks;
 		csvLinks += stats.csvLinks;
+		images = images.concat(stats.images);
 	});
 
 	return {
@@ -235,5 +277,6 @@ const fixNotionExport = function (path) {
 		files: files,
 		markdownLinks: markdownLinks,
 		csvLinks: csvLinks,
+		images,
 	};
 };
