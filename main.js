@@ -60,7 +60,7 @@ const correctMarkdownLinks = (currentDirectory, content) => {
 		return { content: content, links: 0, foundImages: [] };
 
 	let totalLinks = 0;
-	const foundImages = new Set();
+	const foundImages = [];
 
 	let out = content;
 	if (linkFullMatches) {
@@ -75,8 +75,7 @@ const correctMarkdownLinks = (currentDirectory, content) => {
 				// for images, we actually care about the link destination, not the link text
 				linkText = linkPieces[4];
 				const imageDetails = convertImagePath(currentDirectory, linkText);
-				console.log({imageDetails});
-				foundImages.add(imageDetails);
+				foundImages.push(imageDetails);
 				linkText = imageDetails.imageLinkPath;
 			} else {
 				linkText = linkText.replace(ObsidianIllegalNameRegex, ' ');
@@ -101,7 +100,7 @@ const correctMarkdownLinks = (currentDirectory, content) => {
 	return {
 		content: out,
 		links: totalLinks,
-		foundImages: [...foundImages.values()],
+		foundImages,
 	};
 };
 
@@ -122,6 +121,12 @@ const convertImagePath = (currentDirectory, path) => {
 		.join(' ');
 	path = convertRelativePath(path.substring(0, path.lastIndexOf('/')));
 	path = path.substring(2, path.length - 2);
+
+	// both imageTitle and path might have URL encoded pieces, since they were part of Notion URL-like links.
+	// It seems Obsidian doesn't require URL encoding, so we decode that here.
+	// Decoding is also required for the file renaming to work later.
+	imageTitle = decodeURIComponent(imageTitle);
+	path = decodeURIComponent(path);
 
 	// We will later move the images to dedicated /Images folder to keep them out of the way from the notes folders
 	// This calculates the current path, new path, and resolves the absolute image link path to put in the markdown.
@@ -190,7 +195,6 @@ const fixNotionExport = function (path) {
 	let csvLinks = 0;
 	let images = [];
 
-	console.log(`Fixing dir ${path}`);
 	let currentDirectory = fs.readdirSync(path, { withFileTypes: true });
 
 	for (let i = 0; i < currentDirectory.length; i++) {
@@ -256,11 +260,15 @@ const fixNotionExport = function (path) {
 	// move all images to a central /Images/ folder.
 	// the details of current and new filename were already calculated and passed to us as imageDetails.
 	images.forEach((imageDetails) => {
-		const newFileDirectory = npath.dirname(imageDetails.newFilePath);
-		if (!fs.existsSync(newFileDirectory)){
-			fs.mkdirSync(newFileDirectory, { recursive: true });
+		if (fs.existsSync(imageDetails.originalFilePath)) {
+			const newFileDirectory = npath.dirname(imageDetails.newFilePath);
+			if (!fs.existsSync(newFileDirectory)){
+				fs.mkdirSync(newFileDirectory, { recursive: true });
+			}
+			fs.renameSync(imageDetails.originalFilePath, imageDetails.newFilePath);
+		} else {
+			console.log(`Warning: skipped renaming file ${imageDetails.originalFilePath}. This should only happen if a single image is referenced more than once.`);
 		}
-		fs.renameSync(imageDetails.originalFilePath, imageDetails.newFilePath);
 	});
 
 	// after all images are moved, we need to delete their original directories which should now be empty
