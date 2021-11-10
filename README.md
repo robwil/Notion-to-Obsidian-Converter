@@ -1,6 +1,5 @@
-> Note: I'm unfortunately very tied up with work at this time, but feel free to open issues with any requests, suggestions, questions, or bugs! I'll try to address them as soon as life settles down again. Pull requests are welcome!
-> 
-> Thank you! <3
+`@robwil` note: I forked this in order to handle images in a better way. First of all, more than PNG images are now supported. I also didn't like how Obsidian shows all the image subfolders, so I modified the script to move all images to a centralized /Images/ folder off the root. This also means that image links won't break if notes are moved around. (I tried to use `.images` to further hide from Obsidian view, but Obsidian apparently does not support rendering images from hidden folders.)
+
 
 # Notion to Obsidian Converter
 
