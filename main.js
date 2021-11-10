@@ -50,7 +50,7 @@ const truncateDirName = (name) => {
 
 const ObsidianIllegalNameRegex = /[\*\"\/\\\<\>\:\|\?]/g;
 const URLRegex = /(:\/\/)|(w{3})|(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/;
-const correctMarkdownLinks = (content) => {
+const correctMarkdownLinks = (currentDirectory, content) => {
 	//* [Link Text](Link Directory + uuid/And Page Name + uuid) => [[LinkText]]
 
 	const linkFullMatches = content.match(/(\[(.*?)\])(\((.*)\))(\s*)/gi);
@@ -60,7 +60,7 @@ const correctMarkdownLinks = (content) => {
 		return { content: content, links: 0, foundImages: [] };
 
 	let totalLinks = 0;
-	const foundImages = [];
+	const foundImages = new Set();
 
 	let out = content;
 	if (linkFullMatches) {
@@ -74,8 +74,10 @@ const correctMarkdownLinks = (content) => {
 			if (isImagePath(linkText)) {
 				// for images, we actually care about the link destination, not the link text
 				linkText = linkPieces[4];
-				linkText = convertImagePath(linkText);
-				foundImages.push(linkText);
+				const imageDetails = convertImagePath(currentDirectory, linkText);
+				console.log({imageDetails});
+				foundImages.add(imageDetails);
+				linkText = imageDetails.imageLinkPath;
 			} else {
 				linkText = linkText.replace(ObsidianIllegalNameRegex, ' ');
 			}
@@ -99,7 +101,7 @@ const correctMarkdownLinks = (content) => {
 	return {
 		content: out,
 		links: totalLinks,
-		foundImages,
+		foundImages: [...foundImages.values()],
 	};
 };
 
@@ -112,7 +114,8 @@ const isImagePath = (path) => {
 		|| path.includes(".webp");
 }
 
-const convertImagePath = (path) => {
+const convertImagePath = (currentDirectory, path) => {
+	// The image path coming from the Notion MD files will have the UUID appended, which we must clean up
 	let imageTitle = path
 		.substring(path.lastIndexOf('/') + 1)
 		.split('%20')
@@ -120,7 +123,17 @@ const convertImagePath = (path) => {
 	path = convertRelativePath(path.substring(0, path.lastIndexOf('/')));
 	path = path.substring(2, path.length - 2);
 
-	return `/Images/${path}/${imageTitle}`;
+	// We will later move the images to dedicated /Images folder to keep them out of the way from the notes folders
+	// This calculates the current path, new path, and resolves the absolute image link path to put in the markdown.
+	const relativePath = `${path}/${imageTitle}`;
+	const currentDirectoryFromRoot = npath.relative(rootPath, currentDirectory);
+	const fullRelativePath = `${currentDirectoryFromRoot}/${relativePath}`;
+	const imageLinkPath = `/Images/${fullRelativePath}`;
+	return {
+		imageLinkPath,
+		originalFilePath: `${rootPath}/${fullRelativePath}`,
+		newFilePath:  `${rootPath}${imageLinkPath}`,
+	};
 };
 
 const convertNotionLinks = (match, p1, p2, p3) => {
@@ -177,6 +190,7 @@ const fixNotionExport = function (path) {
 	let csvLinks = 0;
 	let images = [];
 
+	console.log(`Fixing dir ${path}`);
 	let currentDirectory = fs.readdirSync(path, { withFileTypes: true });
 
 	for (let i = 0; i < currentDirectory.length; i++) {
@@ -200,6 +214,7 @@ const fixNotionExport = function (path) {
 		//Fix Markdown Links
 		if (npath.extname(file) === '.md') {
 			const correctedFileContents = correctMarkdownLinks(
+				path,
 				fs.readFileSync(file, 'utf8')
 			);
 			if (correctedFileContents.links)
@@ -239,27 +254,22 @@ const fixNotionExport = function (path) {
 	}
 
 	// move all images to a central /Images/ folder.
-	// the /Images/ prefix is already in imagePath.
-	images.forEach((imagePath) => {
-		const imagePieces = imagePath.split('/Images/');
-		const currentFilename = npath.resolve(npath.format({dir: path, base: imagePieces[1]}));
-		const newFilename = npath.resolve(rootPath + '/' + imagePath);
-		const newFileDirectory = npath.dirname(newFilename);
+	// the details of current and new filename were already calculated and passed to us as imageDetails.
+	images.forEach((imageDetails) => {
+		const newFileDirectory = npath.dirname(imageDetails.newFilePath);
 		if (!fs.existsSync(newFileDirectory)){
 			fs.mkdirSync(newFileDirectory, { recursive: true });
 		}
-		fs.renameSync(currentFilename, newFilename);
+		fs.renameSync(imageDetails.originalFilePath, imageDetails.newFilePath);
 	});
 
 	// after all images are moved, we need to delete their original directories which should now be empty
-	images.forEach((imagePath) => {
-		const imagePieces = imagePath.split('/Images/');
-		const currentFilename = npath.resolve(npath.format({dir: path, base: imagePieces[1]}));
-		const currentDirectory = npath.dirname(currentFilename);
-		if (fs.existsSync(currentDirectory)) {
-			fs.rmdirSync(currentDirectory);
+	images.forEach((imageDetails) => {
+		const currentFileDirectory = npath.dirname(imageDetails.originalFilePath);
+		if (fs.existsSync(currentFileDirectory)) {
+			fs.rmdirSync(currentFileDirectory);
 			// also remove directory from recursion that will happen below
-			directories = directories.filter(directory => directory == currentDirectory);
+			directories = directories.filter(directory => directory != currentFileDirectory);
 		}
 	});
 
